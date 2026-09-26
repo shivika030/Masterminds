@@ -1,7 +1,3 @@
-"""
-config.py — single source of truth for paths, shared across all pipeline
-scripts. Import from here instead of hardcoding relative paths in every file.
-"""
 from pathlib import Path
 
 # ---------------------------------------------------------------------------

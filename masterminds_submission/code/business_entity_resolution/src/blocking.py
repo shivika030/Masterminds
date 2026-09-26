@@ -1,17 +1,3 @@
-"""
-blocking.py — candidate generation (blocking) stage.
-
-Combines three blocking strategies and takes their UNION to maximize recall:
-  1. Token-overlap blocking key   (fast, catches exact-ish name matches)
-  2. TF-IDF character n-gram cosine similarity (catches typos/reordering)
-  3. Country + first-token-of-address key (cheap extra signal)
-
-Output: candidate_pairs.tsv with columns
-  source1_entity_id \t candidate_entity_ids (comma-separated, S2-/S3- only)
-
-Run directly to generate candidates for the TEST set:
-    python3 blocking.py
-"""
 from collections import defaultdict
 
 import pandas as pd
