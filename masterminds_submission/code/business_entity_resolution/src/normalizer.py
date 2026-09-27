@@ -1,11 +1,6 @@
 import re
 import pandas as pd
 
-
-# ---------------------------------------------------------------------------
-# 1. Legal-suffix / abbreviation dictionaries
-# ---------------------------------------------------------------------------
-
 NAME_ABBREVIATIONS = {
     r"\bpvt\b": "private",
     r"\bltd\b": "limited",
@@ -16,7 +11,6 @@ NAME_ABBREVIATIONS = {
     r"\bllp\b": "limited liability partnership",
     r"\band\b": "and",
 }
-
 
 LEGAL_SUFFIXES = [
     "private limited",
@@ -36,7 +30,6 @@ LEGAL_SUFFIXES = [
     "co",
 ]
 
-
 ADDRESS_ABBREVIATIONS = {
     r"\brd\b": "road",
     r"\bst\b": "street",
@@ -51,90 +44,36 @@ ADDRESS_ABBREVIATIONS = {
     r"\bsec\b": "sector",
 }
 
+_SUFFIX_REGEX = r"\b(" + "|".join(re.escape(s) for s in LEGAL_SUFFIXES) + r")\s*$"
 
-# ---------------------------------------------------------------------------
-# 2. Core cleanup helpers
-# ---------------------------------------------------------------------------
 
 def _lowercase_strip_punct(text: str) -> str:
-    """
-    Convert text to lowercase and replace punctuation with spaces.
-    """
-
     if text is None:
         return ""
-
     text = str(text).lower()
-
-    # Replace punctuation with spaces.
-    # Example:
-    # "AT&T" -> "at t"
-    # "Pvt. Ltd." -> "pvt ltd"
     text = re.sub(r"[^\w\s]", " ", text)
-
-    # Remove repeated spaces.
     text = re.sub(r"\s+", " ", text).strip()
-
     return text
 
 
 def _expand_abbreviations(text: str, mapping: dict) -> str:
-    """
-    Expand known abbreviations.
-    """
-
     for pattern, expansion in mapping.items():
         text = re.sub(pattern, expansion, text)
-
     text = re.sub(r"\s+", " ", text).strip()
-
     return text
 
 
-# ---------------------------------------------------------------------------
-# 3. Name normalization
-# ---------------------------------------------------------------------------
-
 def normalize_name(raw_name: str) -> dict:
-    """
-    Normalize a single business name.
-
-    Returns:
-        clean_name
-        has_legal_suffix
-        legal_suffix
-        full_normalized
-    """
-
-    # Step 1: lowercase and remove punctuation
     text = _lowercase_strip_punct(raw_name)
-
-    # Step 2: expand abbreviations
-    text = _expand_abbreviations(
-        text,
-        NAME_ABBREVIATIONS
-    )
-
-    # Store complete normalized name before removing legal suffix
+    text = _expand_abbreviations(text, NAME_ABBREVIATIONS)
     full_normalized = text
 
-    # Step 3: detect legal suffix
     found_suffix = None
-
     for suffix in LEGAL_SUFFIXES:
-
         pattern = r"\b" + re.escape(suffix) + r"\s*$"
-
         if re.search(pattern, text):
-
             found_suffix = suffix
-
-            text = re.sub(
-                pattern,
-                "",
-                text
-            ).strip()
-
+            text = re.sub(pattern, "", text).strip()
             break
 
     return {
@@ -145,91 +84,57 @@ def normalize_name(raw_name: str) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# 4. Address normalization
-# ---------------------------------------------------------------------------
-
 def normalize_address(raw_address: str) -> str:
-    """
-    Normalize a single business address.
-    """
-
     text = _lowercase_strip_punct(raw_address)
-
-    text = _expand_abbreviations(
-        text,
-        ADDRESS_ABBREVIATIONS
-    )
-
+    text = _expand_abbreviations(text, ADDRESS_ABBREVIATIONS)
     return text
 
 
-# ---------------------------------------------------------------------------
-# 5. Series normalization functions
-# ---------------------------------------------------------------------------
-
 def normalize_name_series(series: pd.Series) -> pd.DataFrame:
-    """
-    Normalize a pandas Series containing business names.
+    s = series.fillna("").astype(str).str.lower()
+    s = s.str.replace(r"[^\w\s]", " ", regex=True)
+    s = s.str.replace(r"\s+", " ", regex=True).str.strip()
 
-    Returns a DataFrame containing:
+    for pattern, expansion in NAME_ABBREVIATIONS.items():
+        s = s.str.replace(pattern, expansion, regex=True)
+    s = s.str.replace(r"\s+", " ", regex=True).str.strip()
 
-        clean_name
-        has_legal_suffix
-        legal_suffix
-        full_normalized
+    full_normalized = s
+    extracted_suffix = s.str.extract(_SUFFIX_REGEX, expand=False)
+    has_suffix = extracted_suffix.notna()
+    clean_name = s.str.replace(_SUFFIX_REGEX, "", regex=True).str.strip()
 
-    This is the structure expected by blocking.py.
-    """
-
-    series = series.fillna("")
-
-    result = series.apply(normalize_name)
-
-    result_df = pd.DataFrame(
-        result.tolist(),
-        index=series.index
+    return pd.DataFrame(
+        {
+            "clean_name": clean_name,
+            "has_legal_suffix": has_suffix,
+            "legal_suffix": extracted_suffix,
+            "full_normalized": full_normalized,
+        },
+        index=series.index,
     )
-
-    return result_df
 
 
 def normalize_address_series(series: pd.Series) -> pd.Series:
-    """
-    Normalize a pandas Series containing business addresses.
-    """
+    s = series.fillna("").astype(str).str.lower()
+    s = s.str.replace(r"[^\w\s]", " ", regex=True)
+    s = s.str.replace(r"\s+", " ", regex=True).str.strip()
 
-    return series.fillna("").apply(normalize_address)
+    for pattern, expansion in ADDRESS_ABBREVIATIONS.items():
+        s = s.str.replace(pattern, expansion, regex=True)
+    s = s.str.replace(r"\s+", " ", regex=True).str.strip()
 
+    return s
 
-# ---------------------------------------------------------------------------
-# 6. Preprocessing helper
-# ---------------------------------------------------------------------------
 
 def preprocess_text(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Normalize business_name and business_address columns.
-    """
-
-    name_info = normalize_name_series(
-        df["business_name"]
-    )
-
+    name_info = normalize_name_series(df["business_name"])
     df["business_name"] = name_info["clean_name"]
-
-    df["business_address"] = normalize_address_series(
-        df["business_address"]
-    )
-
+    df["business_address"] = normalize_address_series(df["business_address"])
     return df
 
 
-# ---------------------------------------------------------------------------
-# 7. Quick self-test
-# ---------------------------------------------------------------------------
-
 if __name__ == "__main__":
-
     test_names = [
         "Sharma & Sons Pvt. Ltd.",
         "ACME Corp",
@@ -245,38 +150,23 @@ if __name__ == "__main__":
     ]
 
     print("--- Name normalization ---")
-
     for name in test_names:
-        print(
-            f"{name!r:45} -> "
-            f"{normalize_name(name)}"
-        )
+        print(f"{name!r:45} -> {normalize_name(name)}")
 
     print("\n--- Address normalization ---")
-
     for address in test_addresses:
-        print(
-            f"{address!r:45} -> "
-            f"{normalize_address(address)!r}"
-        )
+        print(f"{address!r:45} -> {normalize_address(address)!r}")
 
     print("\n--- Series normalization ---")
-
-    test_df = pd.DataFrame({
-        "business_name": test_names,
-        "business_address": test_addresses
-    })
-
-    name_result = normalize_name_series(
-        test_df["business_name"]
+    test_df = pd.DataFrame(
+        {
+            "business_name": test_names,
+            "business_address": test_addresses,
+        }
     )
-
+    name_result = normalize_name_series(test_df["business_name"])
     print(name_result)
 
     print("\n--- Address Series ---")
-
-    address_result = normalize_address_series(
-        test_df["business_address"]
-    )
-
+    address_result = normalize_address_series(test_df["business_address"])
     print(address_result)
