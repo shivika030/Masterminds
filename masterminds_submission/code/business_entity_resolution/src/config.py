@@ -26,6 +26,8 @@ CANDIDATE_PAIRS_PATH = OUTPUT_DIR / "candidate_pairs.tsv"
 MAX_CANDIDATES_PER_ENTITY = 50   # cap after ranking, per blocking strategy union
 MAX_BLOCK_SIZE = 2000            # a key matching MORE candidates than this is purged
                                   # (too generic — almost certainly noise, not real matches)
-S1_CHUNK_SIZE = 100_000          # rows of Source1 processed per merge batch (memory safety)
+S1_CHUNK_SIZE = 100_000          # max rows of Source1 processed per merge batch
+MAX_CHUNK_MERGE_ROWS = 2_000_000 # safety budget: chunk size shrinks automatically so
+                                  # (chunk_size x largest surviving block) never exceeds this
 VALIDATION_HOLDOUT_FRACTION = 0.15
 RANDOM_SEED = 42
